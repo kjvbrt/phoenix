@@ -325,9 +325,10 @@ export class PhoenixMenuUI implements PhoenixUI<PhoenixMenuNode> {
     drawOptionsNode.addConfig({
       type: 'slider',
       label: 'Opacity',
-      min: 0.1,
+      min: 0.01,
       step: 0.1,
-      max: 1,
+      max: 1.0,
+      value: 1.0,
       onChange: (value) => {
         const eventDataObject = this.sceneManager.getObjectByName(
           SceneManager.EVENT_DATA_ID,

@@ -178,7 +178,7 @@ export class PhoenixObjects {
     lineObject.name = 'Track';
 
     // Creating a group to add both the Tube curve and the Line
-    trackObject.add(tubeObject);
+    // trackObject.add(tubeObject);
     trackObject.add(lineObject);
 
     // Setting info to the tubeObject and trackObject for selection and cuts

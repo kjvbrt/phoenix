@@ -195,7 +195,9 @@ export class Edm4hepJsonLoader extends PhoenixLoader {
         vertices.push(vertex);
       });
 
-      allVertices[collName] = vertices;
+      if (vertices.length > 0) {
+        allVertices[collName] = vertices;
+      }
     }
 
     return allVertices;
@@ -224,79 +226,99 @@ export class Edm4hepJsonLoader extends PhoenixLoader {
         continue;
       }
 
-      const rawTracks = collDict['collection'];
-      const electrons: any[] = [];
-      const photons: any[] = [];
-      const pions: any[] = [];
-      const protons: any[] = [];
-      const kaons: any[] = [];
-      const other: any[] = [];
+      const tracks: any[] = [];
+      const trackStates: any[] = [];
 
-      rawTracks.forEach((rawTrack: any) => {
-        const positions: any[] = [];
-        if ('trackerHits' in rawTrack) {
-          const trackerHitRefs = rawTrack['trackerHits'];
-          trackerHitRefs.forEach((trackerHitRef: any) => {
-            const trackerHits = this.getCollByID(
-              event,
-              trackerHitRef['collectionID'],
-            );
-            const trackerHit = trackerHits[trackerHitRef['index']];
-            positions.push([
-              trackerHit['position']['x'] * 0.1,
-              trackerHit['position']['y'] * 0.1,
-              trackerHit['position']['z'] * 0.1,
-            ]);
-          });
+      collDict['collection'].forEach((edm4hepTrack: any) => {
+        if (!('trackStates' in edm4hepTrack)) {
+          return;
         }
-        if ('trackStates' in rawTrack && positions.length === 0) {
-          const trackStates = rawTrack['trackStates'];
-          trackStates.forEach((trackState: any) => {
-            if ('referencePoint' in trackState) {
-              positions.push([
-                trackState['referencePoint']['x'] * 0.1,
-                trackState['referencePoint']['y'] * 0.1,
-                trackState['referencePoint']['z'] * 0.1,
-              ]);
+
+        // Determine the color of the track and its track states
+        const trackColor =
+          'color' in edm4hepTrack ? edm4hepTrack['color'] : '0000cd';
+
+        // pins -- helper points along the track path
+        const trackPins: any[] = [];
+
+        // Track states
+        edm4hepTrack['trackStates'].forEach(
+          (edm4hepTrackState: any, idx: number) => {
+            // Draw only track states with reference point at:
+            //   - IP
+            //   - first hit
+            //   - vertex
+            if (![1, 2, 5].includes(edm4hepTrackState['location'])) {
+              return;
             }
-          });
-        }
 
-        let trackColor = '0000cd';
-        if ('color' in rawTrack) {
-          trackColor = rawTrack['color'];
-        }
+            // Check if there is a next track state
+            if (idx + 1 >= edm4hepTrack['trackStates'].length) {
+              return;
+            }
+
+            // Total arc length in xy projection
+            const nextTrackState = edm4hepTrack['trackStates'][idx + 1];
+            const s =
+              (nextTrackState['referencePoint']['z'] / 10 -
+                edm4hepTrackState['Z0'] / 10 -
+                edm4hepTrackState['referencePoint']['z'] / 10) /
+              edm4hepTrackState['tanLambda'];
+            const omega = edm4hepTrackState['omega'] * 10;
+            const FF = 1 / omega - edm4hepTrackState['D0'] / 10;
+            let n = 10;
+            if (s > 20) {
+              n = 100;
+            }
+            if (s > 200) {
+              n = 1000;
+            }
+            const dS = s / n;
+            const dPhi = -dS * omega;
+
+            // pins -- helper points along the track path
+            const trackStatePins: any[] = [];
+            for (let i = 0; i <= n; ++i) {
+              const thisPhi = this.sumPhi(edm4hepTrackState['phi'], i * dPhi);
+              const thisS = i * dS;
+              const thisX =
+                edm4hepTrackState['referencePoint']['x'] / 10 +
+                FF * Math.sin(edm4hepTrackState['phi']) -
+                Math.sin(thisPhi) / omega;
+              const thisY =
+                edm4hepTrackState['referencePoint']['y'] / 10 -
+                FF * Math.cos(edm4hepTrackState['phi']) +
+                Math.cos(thisPhi) / omega;
+              const thisZ =
+                edm4hepTrackState['referencePoint']['z'] / 10 +
+                edm4hepTrackState['Z0'] +
+                thisS * edm4hepTrackState['tanLambda'];
+
+              trackPins.push([thisX, thisY, thisZ]);
+              trackStatePins.push([thisX, thisY, thisZ]);
+            }
+
+            const trackState = {
+              pos: trackStatePins,
+              color: trackColor,
+            };
+
+            trackStates.push(trackState);
+          },
+        );
 
         const track = {
-          pos: positions,
+          pos: trackPins,
           color: trackColor,
         };
 
-        if ('pid' in rawTrack) {
-          if (rawTrack['pid'] == 'electron') {
-            electrons.push(track);
-          } else if (rawTrack['pid'] == 'photon') {
-            photons.push(track);
-          } else if (rawTrack['pid'] == 'pion') {
-            pions.push(track);
-          } else if (rawTrack['pid'] == 'proton') {
-            protons.push(track);
-          } else if (rawTrack['pid'] == 'kaon') {
-            kaons.push(track);
-          } else {
-            other.push(track);
-          }
-        } else {
-          other.push(track);
-        }
+        tracks.push(track);
       });
 
-      allTracks[collName + ' | Electrons'] = electrons;
-      allTracks[collName + ' | Photons'] = photons;
-      allTracks[collName + ' | Pions'] = pions;
-      allTracks[collName + ' | Protons'] = protons;
-      allTracks[collName + ' | Kaons'] = kaons;
-      allTracks[collName + ' | Other'] = other;
+      if (tracks.length > 0) {
+        // allTracks[collName] = tracks;
+        allTracks[collName + ' | Track States'] = trackStates;
+      }
     }
 
     return allTracks;
@@ -442,7 +464,9 @@ export class Edm4hepJsonLoader extends PhoenixLoader {
         cells.push(cell);
       });
 
-      allCells[collName] = cells;
+      if (cells.length > 0) {
+        allCells[collName] = cells;
+      }
     }
 
     return allCells;
@@ -494,7 +518,9 @@ export class Edm4hepJsonLoader extends PhoenixLoader {
         clusters.push(cluster);
       });
 
-      allClusters[collName] = clusters;
+      if (clusters.length > 0) {
+        allClusters[collName] = clusters;
+      }
     }
 
     return allClusters;
@@ -554,7 +580,10 @@ export class Edm4hepJsonLoader extends PhoenixLoader {
         };
         jets.push(jet);
       });
-      allJets[collName] = jets;
+
+      if (jets.length > 0) {
+        allJets[collName] = jets;
+      }
     }
 
     return allJets;
@@ -689,5 +718,21 @@ export class Edm4hepJsonLoader extends PhoenixLoader {
         return collDict['collection'];
       }
     }
+  }
+
+  private sumPhi(phiA: number, phiB: number) {
+    let sumPhi = phiA + phiB;
+
+    if (sumPhi <= -Math.PI) {
+      const revolutions = Math.floor(Math.abs(sumPhi) / Math.PI) + 1;
+      sumPhi = sumPhi + revolutions * Math.PI;
+    }
+
+    if (sumPhi > Math.PI) {
+      const revolutions = Math.floor(sumPhi / Math.PI) + 1;
+      sumPhi = sumPhi - revolutions * Math.PI;
+    }
+
+    return sumPhi;
   }
 }

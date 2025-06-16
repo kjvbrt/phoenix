@@ -531,13 +531,19 @@ export class ImportManager {
    * @returns Geometry name and menuNodeName if present in scene name.
    */
   private processGLTFSceneName(sceneName?: string, menuNodeName?: string) {
+    console.log('sceneName: ', sceneName);
+    console.log('menuNodeName: ', menuNodeName);
     if (sceneName) {
       const nodes = sceneName.split('_>_');
-      menuNodeName && nodes.unshift(menuNodeName); // eslint-disable-line
+      if (menuNodeName !== '') {
+        nodes.unshift(menuNodeName);
+      }
       const fullNodeName = nodes.join(' > ');
       nodes.pop();
       const menuName = nodes.join(' > ');
 
+      console.log('fullNodeName: ', fullNodeName);
+      console.log('menuNodeName: ', menuName);
       return { name: fullNodeName, menuNodeName: menuName };
     }
   }
